@@ -2268,10 +2268,21 @@ mt.__namecall = newcclosure(function(self, ...)
                 IsSummoningAction = false 
                 CutsceneCount = 0 -- Reset untuk putaran dungeon berikutnya
                 Rayfield:Notify({Title = "LaManchaland", Content = "its done i guess?", Duration = 3})
+                
+                -- [TAMBAHAN] Reset character setelah 40 detik
+                task.spawn(function()
+                    task.wait(40)
+                    local char = LocalPlayer.Character
+                    if char then
+                        local hum = char:FindFirstChildOfClass("Humanoid")
+                        if hum then
+                            hum.Health = 0 -- Membunuh/reset character
+                        end
+                    end
+                end)
             end
-        end
-    end
-    
+        end -- [KOREKSI 1]: Ini untuk menutup 'if AutoLaMancha then'
+    end -- [KOREKSI 2]: Ini untuk menutup 'if not checkcaller() ... then'
     return oldNamecall(self, ...)
 end)
 setreadonly(mt, true)
