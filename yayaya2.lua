@@ -2409,6 +2409,7 @@ task.spawn(function()
 
     -- 1. Jalankan untuk karakter yang sedang hidup saat script dieksekusi pertama kali
     if LocalPlayer.Character then
+        task.wait(1)
         ClaimDeliciousMeat()
     end
 
