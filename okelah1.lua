@@ -1653,14 +1653,48 @@ mt.__namecall = newcclosure(function(self, ...)
                 CutsceneCount = 0 -- Reset untuk putaran dungeon berikutnya
                 Rayfield:Notify({Title = "LaManchaland", Content = "its done i guess?", Duration = 3})
                 
-                -- [TAMBAHAN] Reset character setelah 40 detik
+                -- [TAMBAHAN] Refresh character setelah 40 detik (Logika 'refresh' Infinite Yield)
                 task.spawn(function()
                     task.wait(40)
-                    local char = LocalPlayer.Character
+                    local player = game:GetService("Players").LocalPlayer
+                    local char = player.Character
+                    
                     if char then
+                        local hrp = char:FindFirstChild("HumanoidRootPart")
                         local hum = char:FindFirstChildOfClass("Humanoid")
-                        if hum then
-                            hum.Health = 0 -- Membunuh/reset character
+                        
+                        if hrp and hum then
+                            -- 1. Simpan posisi (CFrame) saat ini
+                            local savedCFrame = hrp.CFrame 
+                            
+                            -- 2. Bunuh karakter untuk memicu respawn
+                            hum.Health = 0 
+                            
+                            -- 3. Tunggu karakter yang baru spawn
+                            local newChar = player.CharacterAdded:Wait()
+                            local newHrp = newChar:WaitForChild("HumanoidRootPart", 5)
+                            
+                            -- 4. Paksa teleport kembali ke posisi semula
+                            if newHrp then
+                                local runService = game:GetService("RunService")
+                                local connection
+                                local frameCount = 0
+                                
+                                connection = runService.Heartbeat:Connect(function()
+                                    if not newChar or not newChar.Parent then 
+                                        connection:Disconnect() 
+                                        return 
+                                    end
+                                    
+                                    newHrp.CFrame = savedCFrame
+                                    newHrp.AssemblyLinearVelocity = Vector3.zero
+                                    
+                                    frameCount = frameCount + 1
+                                    if frameCount >= 15 then -- Berhenti memaksa setelah 15 frame
+                                        connection:Disconnect()
+                                    end
+                                end)
+                            end
                         end
                     end
                 end)
@@ -1793,7 +1827,7 @@ task.spawn(function()
 
     -- 1. Jalankan untuk karakter yang sedang hidup saat script dieksekusi pertama kali
     if LocalPlayer.Character then
-        task.wait(1)
+        task.wait(2.2)
         ClaimDeliciousMeat()
     end
 
