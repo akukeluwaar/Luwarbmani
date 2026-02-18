@@ -2285,14 +2285,46 @@ function NoLagV2_Disable()
     end
 end
 
--- ===== FORCE REFRESH (LoadCharacter) =====
-local function ForceKillByVoidForLamanchaland()
-    if not AutoLaMancha then return end
-    pcall(function()
-        LocalPlayer:LoadCharacter()
+-- =======================================================
+-- ===== INFINITE YIELD STYLE REFRESH (FULL RESET) =======
+-- =======================================================
+local function IY_Refresh(plr)
+    local char = plr.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local cam = workspace.CurrentCamera
+    
+    if not root then return end
+
+    -- 1. Simpan Posisi Karakter & Kamera
+    local savedPos = root.CFrame
+    local savedCamPos = cam.CFrame
+
+    -- 2. Trik Respawn Instan ala Infinite Yield
+    -- Membunuh humanoid dan mengosongkan karakter untuk memaksa engine me-reload semuanya seketika
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then hum:ChangeState(15) end -- 15 adalah Enum.HumanoidStateType.Dead
+    char:ClearAllChildren()
+    
+    local newChar = Instance.new("Model")
+    newChar.Parent = workspace
+    plr.Character = newChar
+    
+    task.wait()
+    plr.Character = char
+    newChar:Destroy()
+
+    -- 3. Tunggu Karakter & UI Baru Ter-load, Lalu Kembalikan Posisi
+    task.spawn(function()
+        local spawnedChar = plr.CharacterAdded:Wait()
+        local newRoot = spawnedChar:WaitForChild("HumanoidRootPart", 5)
+        
+        if newRoot then
+            -- Tunggu 1 frame agar physics dan UI selesai di-render
+            game:GetService("RunService").Heartbeat:Wait() 
+            newRoot.CFrame = savedPos
+            workspace.CurrentCamera.CFrame = savedCamPos
+        end
     end)
-    LocalPlayer.CharacterAdded:Wait()
-    task.wait(1)
 end
 
 -- =======================================================
@@ -2362,9 +2394,9 @@ mt.__namecall = newcclosure(function(self, ...)
                 IsSummoningAction = false
                 Rayfield:Notify({Title = "LaManchaland", Content = "its done i guess?", Duration = 3})
                 
-                -- [TAMBAHAN] Refresh character setelah 60 detik
+                -- [TAMBAHAN] Refresh character & GUI total setelah 60 detik (IY Style)
                 task.wait(60)
-                ForceKillByVoidForLamanchaland()
+                IY_Refresh(LocalPlayer)
             end
         end -- [KOREKSI 1]: Ini untuk menutup 'if AutoLaMancha then'
     end -- [KOREKSI 2]: Ini untuk menutup 'if not checkcaller() ... then'
