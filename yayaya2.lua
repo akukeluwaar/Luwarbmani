@@ -2546,25 +2546,22 @@ game:GetService("Players").LocalPlayer.Idled:Connect(function()
 end)
 -- [[ END: ANTI AFK / IDLE ]] --
 
--- [[ START: REMOVE FOG (ALWAYS ON) ]] --
-local _Lighting = game:GetService("Lighting")
--- Set langsung saat script load
-pcall(function()
-    _Lighting.FogEnd   = 100000
-    _Lighting.FogStart = 0
-end)
--- Listener: reset fog kalau game mengubahnya kembali (misalnya saat map load/change)
-_Lighting:GetPropertyChangedSignal("FogEnd"):Connect(function()
-    if _Lighting.FogEnd < 100000 then
-        _Lighting.FogEnd = 100000
+-- [[ START: REMOVE FOG (ALWAYS ON LOOP) ]] --
+task.spawn(function()
+    while task.wait(0.01) do
+        pcall(function()
+            local Lighting = game:GetService("Lighting")
+            Lighting.FogEnd = 100000
+            Lighting.FogStart = 0
+            for _, v in pairs(Lighting:GetDescendants()) do
+                if v:IsA("Atmosphere") then
+                    v:Destroy()
+                end
+            end
+        end)
     end
 end)
-_Lighting:GetPropertyChangedSignal("FogStart"):Connect(function()
-    if _Lighting.FogStart > 0 then
-        _Lighting.FogStart = 0
-    end
-end)
--- [[ END: REMOVE FOG (ALWAYS ON) ]] --
+-- [[ END: REMOVE FOG (ALWAYS ON LOOP) ]] --
 
 local stoploop = false
 while true do            
