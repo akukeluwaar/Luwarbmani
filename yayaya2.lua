@@ -592,13 +592,10 @@ UtilityTab:CreateToggle({
     Callback = function(v)
         AutoNoLagV2 = v
         if v then
-            Rayfield:Notify({Title = "NoLag (Testing)", Content = "Aktif! Membersihkan effects...", Duration = 3})
+            NoLagV2_Enable()
+            Rayfield:Notify({Title = "NoLag (Testing)", Content = "Aktif!", Duration = 3})
         else
-            -- Putus koneksi listener jika dimatikan
-            if NoLagV2Connection then
-                NoLagV2Connection:Disconnect()
-                NoLagV2Connection = nil
-            end
+            NoLagV2_Disable()
             Rayfield:Notify({Title = "NoLag (Testing)", Content = "Dimatikan.", Duration = 2})
         end
     end
@@ -2228,102 +2225,75 @@ end)
 -- ===== NO LAG V2 (TESTING) =========================
 -- =======================================================
 
--- Kelas-kelas yang dianggap "effect" dan harus dihapus
-local NOLAG_BLACKLIST_CLASS = {
-    -- Particle & Visual Effects
-    "ParticleEmitter", "Fire", "Smoke", "Sparkles", "Trail",
-    -- Post-Processing Lighting Effects
-    "BloomEffect", "BlurEffect", "ColorCorrectionEffect",
-    "SunRaysEffect", "DepthOfFieldEffect",
-    -- Atmospheric
-    "Atmosphere",
-    -- Decal & Texture (surface)
-    "Decal", "Texture",
+local NOLAG_CLASS = {
+    ParticleEmitter=true, Fire=true, Smoke=true, Sparkles=true, Trail=true,
+    BloomEffect=true, BlurEffect=true, ColorCorrectionEffect=true,
+    SunRaysEffect=true, DepthOfFieldEffect=true,
+    Atmosphere=true, Decal=true, Texture=true,
 }
 
--- Nama folder VFX yang langsung di-clear children-nya (bukan dihapus foldernya)
-local NOLAG_VFX_FOLDERS = {
-    "effects", "effect", "vfx", "fx",
+local NOLAG_VFX_NAME = {
+    effects=true, effect=true, vfx=true, fx=true,
 }
 
--- Fungsi utama: hapus satu objek jika masuk blacklist
 local function NoLagV2_CleanObject(obj)
     if not obj or not obj.Parent then return end
-
-    -- 1. Cek berdasarkan ClassName
-    for _, className in ipairs(NOLAG_BLACKLIST_CLASS) do
-        if obj:IsA(className) then
-            pcall(function() obj:Destroy() end)
-            return
-        end
+    if NOLAG_CLASS[obj.ClassName] then
+        pcall(function() obj:Destroy() end)
+        return
     end
-
-    -- 2. Cek apakah folder/model bernama vfx/effect/effects
-    if obj:IsA("Folder") or obj:IsA("Model") then
-        local nameLower = string.lower(obj.Name)
-        for _, vfxName in ipairs(NOLAG_VFX_FOLDERS) do
-            if nameLower == vfxName then
-                pcall(function() obj:ClearAllChildren() end)
-                return
-            end
-        end
+    if (obj:IsA("Folder") or obj:IsA("Model")) and NOLAG_VFX_NAME[string.lower(obj.Name)] then
+        pcall(function() obj:ClearAllChildren() end)
     end
 end
 
--- Fungsi: scan awal seluruh Workspace & Lighting
-local function NoLagV2_FullScan()
-    -- Bersihkan Fog via properties Lighting (sangat ringan, tidak perlu loop)
+-- Scan sekali saat toggle ON, pakai coroutine agar tidak freeze game
+local function NoLagV2_OneTimeScan()
     local Lighting = game:GetService("Lighting")
+    -- Reset fog via property (instan, tidak berat)
     pcall(function()
-        Lighting.FogEnd    = 100000
-        Lighting.FogStart  = 0
-        Lighting.FogColor  = Color3.new(0.75, 0.75, 0.75)
+        Lighting.FogEnd   = 100000
+        Lighting.FogStart = 0
     end)
-
-    -- Scan Workspace descendants
+    -- Hapus post-processing di Lighting
+    for _, obj in ipairs(Lighting:GetChildren()) do
+        NoLagV2_CleanObject(obj)
+    end
+    -- Scan Workspace dengan yield tiap 200 objek agar tidak spike
+    local count = 0
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if not AutoNoLagV2 then break end
         NoLagV2_CleanObject(obj)
-    end
-
-    -- Scan Lighting descendants (bloom, blur, atmosphere, dll)
-    for _, obj in ipairs(Lighting:GetChildren()) do
-        if not AutoNoLagV2 then break end
-        NoLagV2_CleanObject(obj)
+        count = count + 1
+        if count % 200 == 0 then
+            task.wait() -- yield singkat, tidak terasa tapi cegah freeze
+        end
     end
 end
 
--- Loop utama NoLag V2
-task.spawn(function()
-    while true do
-        task.wait(3) -- Interval ringan, tidak perlu terlalu sering
+function NoLagV2_Enable()
+    -- 1. Scan sekali di background
+    task.spawn(NoLagV2_OneTimeScan)
 
-        if not AutoNoLagV2 then
-            -- Pastikan listener diputus jika toggle off
-            if NoLagV2Connection then
-                NoLagV2Connection:Disconnect()
-                NoLagV2Connection = nil
+    -- 2. Listener reaktif: hapus effect BARU yang muncul saat runtime
+    if not NoLagV2Connection then
+        NoLagV2Connection = Workspace.DescendantAdded:Connect(function(obj)
+            if AutoNoLagV2 then
+                task.delay(0.05, function()
+                    NoLagV2_CleanObject(obj)
+                end)
             end
-            continue
-        end
-
-        -- Jalankan full scan tiap 3 detik
-        NoLagV2_FullScan()
-
-        -- Pasang listener DescendantAdded jika belum ada
-        -- Ini menangkap effect yang baru muncul (spawn baru, skill, dll)
-        if not NoLagV2Connection then
-            NoLagV2Connection = Workspace.DescendantAdded:Connect(function(obj)
-                if AutoNoLagV2 then
-                    -- Beri sedikit delay agar object sempurna terbentuk sebelum dihapus
-                    task.delay(0.05, function()
-                        NoLagV2_CleanObject(obj)
-                    end)
-                end
-            end)
-        end
+        end)
     end
-end)
+end
+
+function NoLagV2_Disable()
+    AutoNoLagV2 = false
+    if NoLagV2Connection then
+        NoLagV2Connection:Disconnect()
+        NoLagV2Connection = nil
+    end
+end
 
 -- ===== FORCE KILL VIA MAP VOID =====
 local function ForceKillByVoidForLamanchaland()
