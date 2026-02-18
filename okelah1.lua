@@ -1802,12 +1802,15 @@ task.spawn(function()
 
     -- 1. Jalankan untuk karakter yang sedang dipakai sekarang
     if LocalPlayer.Character then
+        task.wait(0.5) -- TAMBAHAN: Tunggu 2 detik agar server siap
         ForceTeleport(LocalPlayer.Character)
     end
 
     -- 2. Jalankan otomatis setiap kali respawn
-    LocalPlayer.CharacterAdded:Connect(ForceTeleport)
-end)
+    LocalPlayer.CharacterAdded:Connect(function(char)
+        task.wait(0.5) -- TAMBAHAN: Tunggu 2 detik setelah respawn
+        ForceTeleport(char)
+    end)
 -- [[ END: INSTANT SPAWN TELEPORT ]] --
 
 -- [[ START: AUTO DELICIOUS MEAT ON SPAWN ]] --
