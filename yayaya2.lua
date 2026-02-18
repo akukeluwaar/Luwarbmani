@@ -74,6 +74,9 @@ local PurpleFollow = false
 local AutoMastery = false
 local AutoBreakthrough = false
 
+-- NO LAG VARIABLE
+local AutoNoLag = false
+
 -- Utility Variable
 local AutoClear = false
 local AutoBPExchange = false 
@@ -685,6 +688,20 @@ BinahToggle = UtilityTab:CreateToggle({ -- 2. Kita masukkan tombolnya ke dalam v
         AutoBinah = v
         if v then
             Rayfield:Notify({Title = "Binah Search", Content = "Checking for Arbiter...", Duration = 3})
+        end
+    end
+})
+
+UtilityTab:CreateToggle({
+    Name = "No Lag (Testing) - FPS Boost",
+    CurrentValue = false,
+    Flag = "AutoNoLag", 
+    Callback = function(v)
+        AutoNoLag = v
+        if v then
+            Rayfield:Notify({Title = "Optimization", Content = "Removing Textures & VFX...", Duration = 3})
+        else
+            Rayfield:Notify({Title = "Optimization", Content = "No Lag Mode OFF (Note: Removed textures require rejoin to fix)", Duration = 4})
         end
     end
 })
@@ -2201,6 +2218,91 @@ task.spawn(function()
     end
 end)
 
+-- ===== FORCE KILL VIA MAP VOID =====
+local function ForceKillByVoidForLamanchaland()
+    local startTime = os.clock()
+    while (AutoLaMancha) and (os.clock() - startTime < 10) do
+
+        local char = LocalPlayer.Character
+        if not char then
+            LocalPlayer.CharacterAdded:Wait()
+            task.wait(0.5)
+            return
+        end
+
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hum or not hrp then
+            task.wait(0.2)
+            continue
+        end
+
+        -- Cari Killbrick di workspace.Map.Void
+        local map = Workspace:FindFirstChild("Map")
+        local voidFolder = map and map:FindFirstChild("Void")
+        local killbrick = voidFolder and voidFolder:FindFirstChild("Killbrick")
+
+        if killbrick and killbrick:IsA("BasePart") then
+            -- Fire TouchTransmitter yang ada pada TouchInterest di Killbrick
+            local touchInterest = killbrick:FindFirstChildOfClass("TouchTransmitter")
+            if touchInterest then
+                firetouchinterest(hrp, killbrick, 0)
+            end
+        end
+
+        if hum.Health <= 0 then
+            LocalPlayer.CharacterAdded:Wait()
+            task.wait(1)
+            return
+        end
+
+        task.wait(0.25)
+    end
+end
+
+-- ===== AUTO NO LAG / OPTIMIZATION LOOP =====
+task.spawn(function()
+    while task.wait(3) do -- Berjalan setiap 3 detik agar tidak membuat game freeze saat scanning
+        if AutoNoLag then
+            pcall(function()
+                -- 1. Matikan Shadows & Fog di Lighting
+                game:GetService("Lighting").GlobalShadows = false
+                game:GetService("Lighting").FogEnd = 9e9
+                game:GetService("Lighting").Brightness = 1
+                
+                for _, effect in pairs(game:GetService("Lighting"):GetChildren()) do
+                    if effect:IsA("PostEffect") or effect:IsA("Atmosphere") or effect:IsA("ColorCorrectionEffect") or effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect") then
+                        effect:Destroy()
+                    end
+                end
+
+                -- 2. Hapus Tekstur, Partikel, dan jadikan map Smooth Plastic
+                for _, v in pairs(Workspace:GetDescendants()) do
+                    if v:IsA("BasePart") and not v:IsA("MeshPart") then
+                        v.Material = Enum.Material.SmoothPlastic
+                        v.Reflectance = 0
+                        v.CastShadow = false
+                    elseif v:IsA("Decal") or v:IsA("Texture") then
+                        v.Transparency = 1 -- Transparansi 1 lebih aman daripada Destroy() untuk mencegah game error
+                    elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") then
+                        v:Destroy()
+                    end
+                end
+
+                -- 3. Bersihkan folder khusus Effects / VFX jika game menggunakannya
+                local vfxFolders = {"effects", "effect", "vfx", "particles", "visuals"}
+                for _, folder in pairs(Workspace:GetChildren()) do
+                    if folder:IsA("Folder") or folder:IsA("Model") then
+                        if table.find(vfxFolders, string.lower(folder.Name)) then
+                            folder:ClearAllChildren()
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
 -- =======================================================
 -- ===== AUTO DUNGEON READY (UPDATED: PressedReady1) =====
 -- =======================================================
@@ -2268,48 +2370,9 @@ mt.__namecall = newcclosure(function(self, ...)
                 IsSummoningAction = false
                 Rayfield:Notify({Title = "LaManchaland", Content = "its done i guess?", Duration = 3})
                 
-                -- [TAMBAHAN] Refresh character setelah 40 detik (Logika 'refresh' Infinite Yield)
-                task.spawn(function()
-                    task.wait(40)
-                    local player = game:GetService("Players").LocalPlayer
-                    local char = player.Character
-                    
-                    if char then
-                        local hum = char:FindFirstChildOfClass("Humanoid")
-                        local root = char:FindFirstChild("HumanoidRootPart")
-                        
-                        if hum and root then
-                            -- 1. Simpan CFrame Karakter & Kamera (Khas Infinite Yield)
-                            local savedCFrame = root.CFrame
-                            local savedCamCFrame = workspace.CurrentCamera.CFrame
-                            
-                            -- 2. Fast Respawn Trick (Logika 'respawn' Infinite Yield)
-                            -- Mengosongkan karakter agar game memaksa instant respawn tanpa delay timer standar
-                            hum:ChangeState(Enum.HumanoidStateType.Dead)
-                            char:ClearAllChildren()
-                            local tempModel = Instance.new("Model")
-                            tempModel.Parent = workspace
-                            player.Character = tempModel
-                            task.wait()
-                            player.Character = char
-                            tempModel:Destroy()
-                            
-                            -- 3. Menunggu karakter baru dan mengembalikan posisinya
-                            task.spawn(function()
-                                local newChar = player.CharacterAdded:Wait()
-                                local newHum = newChar:WaitForChild("Humanoid", 10)
-                                local newRoot = newChar:WaitForChild("HumanoidRootPart", 10)
-                                
-                                if newHum and newRoot then
-                                    -- IY mengembalikan posisi tubuh dan arah pandang kamera
-                                    newRoot.CFrame = savedCFrame
-                                    task.wait()
-                                    workspace.CurrentCamera.CFrame = savedCamCFrame
-                                end
-                            end)
-                        end
-                    end
-                end)
+                -- [TAMBAHAN] Refresh character setelah 60 detik
+                task.wait(60)
+                ForceKillByVoidForLamanchaland()
             end
         end -- [KOREKSI 1]: Ini untuk menutup 'if AutoLaMancha then'
     end -- [KOREKSI 2]: Ini untuk menutup 'if not checkcaller() ... then'
@@ -2445,7 +2508,7 @@ task.spawn(function()
 
     -- 2. Jalankan otomatis setiap kali karakter respawn/spawn baru
     LocalPlayer.CharacterAdded:Connect(function(char)
-        task.wait(1) -- Delay kecil agar game memuat karakter dan server sinkron terlebih dahulu
+        task.wait(2.2)
         ClaimDeliciousMeat()
     end)
 end)
