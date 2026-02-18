@@ -2275,41 +2275,38 @@ mt.__namecall = newcclosure(function(self, ...)
                     local char = player.Character
                     
                     if char then
-                        local hrp = char:FindFirstChild("HumanoidRootPart")
                         local hum = char:FindFirstChildOfClass("Humanoid")
+                        local root = char:FindFirstChild("HumanoidRootPart")
                         
-                        if hrp and hum then
-                            -- 1. Simpan posisi (CFrame) saat ini
-                            local savedCFrame = hrp.CFrame 
+                        if hum and root then
+                            -- 1. Simpan CFrame Karakter & Kamera (Khas Infinite Yield)
+                            local savedCFrame = root.CFrame
+                            local savedCamCFrame = workspace.CurrentCamera.CFrame
                             
-                            -- 2. Bunuh karakter untuk memicu respawn
-                            hum.Health = 0 
+                            -- 2. Fast Respawn Trick (Logika 'respawn' Infinite Yield)
+                            -- Mengosongkan karakter agar game memaksa instant respawn tanpa delay timer standar
+                            hum:ChangeState(Enum.HumanoidStateType.Dead)
+                            char:ClearAllChildren()
+                            local tempModel = Instance.new("Model")
+                            tempModel.Parent = workspace
+                            player.Character = tempModel
+                            task.wait()
+                            player.Character = char
+                            tempModel:Destroy()
                             
-                            -- 3. Tunggu karakter yang baru spawn
-                            local newChar = player.CharacterAdded:Wait()
-                            local newHrp = newChar:WaitForChild("HumanoidRootPart", 5)
-                            
-                            -- 4. Paksa teleport kembali ke posisi semula
-                            if newHrp then
-                                local runService = game:GetService("RunService")
-                                local connection
-                                local frameCount = 0
+                            -- 3. Menunggu karakter baru dan mengembalikan posisinya
+                            task.spawn(function()
+                                local newChar = player.CharacterAdded:Wait()
+                                local newHum = newChar:WaitForChild("Humanoid", 10)
+                                local newRoot = newChar:WaitForChild("HumanoidRootPart", 10)
                                 
-                                connection = runService.Heartbeat:Connect(function()
-                                    if not newChar or not newChar.Parent then 
-                                        connection:Disconnect() 
-                                        return 
-                                    end
-                                    
-                                    newHrp.CFrame = savedCFrame
-                                    newHrp.AssemblyLinearVelocity = Vector3.zero
-                                    
-                                    frameCount = frameCount + 1
-                                    if frameCount >= 15 then -- Berhenti memaksa setelah 15 frame
-                                        connection:Disconnect()
-                                    end
-                                end)
-                            end
+                                if newHum and newRoot then
+                                    -- IY mengembalikan posisi tubuh dan arah pandang kamera
+                                    newRoot.CFrame = savedCFrame
+                                    task.wait()
+                                    workspace.CurrentCamera.CFrame = savedCamCFrame
+                                end
+                            end)
                         end
                     end
                 end)
