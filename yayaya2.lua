@@ -74,12 +74,13 @@ local PurpleFollow = false
 local AutoMastery = false
 local AutoBreakthrough = false
 
--- NO LAG VARIABLE
-local AutoNoLag = false
-
 -- Utility Variable
 local AutoClear = false
 local AutoBPExchange = false 
+
+-- NO LAG V2 (TESTING)
+local AutoNoLagV2 = false
+local NoLagV2Connection = nil
 
 -- Target Variables
 local RedTargetList = {}
@@ -584,6 +585,25 @@ UtilityTab:CreateToggle({
     end
 })
 
+UtilityTab:CreateToggle({
+    Name = "NoLag (Testing) - Hapus Effects, VFX, Fog, Texture",
+    CurrentValue = false,
+    Flag = "AutoNoLagV2", 
+    Callback = function(v)
+        AutoNoLagV2 = v
+        if v then
+            Rayfield:Notify({Title = "NoLag (Testing)", Content = "Aktif! Membersihkan effects...", Duration = 3})
+        else
+            -- Putus koneksi listener jika dimatikan
+            if NoLagV2Connection then
+                NoLagV2Connection:Disconnect()
+                NoLagV2Connection = nil
+            end
+            Rayfield:Notify({Title = "NoLag (Testing)", Content = "Dimatikan.", Duration = 2})
+        end
+    end
+})
+
 UtilityTab:CreateSection("Boss Summoner")
 
 UtilityTab:CreateToggle({
@@ -688,20 +708,6 @@ BinahToggle = UtilityTab:CreateToggle({ -- 2. Kita masukkan tombolnya ke dalam v
         AutoBinah = v
         if v then
             Rayfield:Notify({Title = "Binah Search", Content = "Checking for Arbiter...", Duration = 3})
-        end
-    end
-})
-
-UtilityTab:CreateToggle({
-    Name = "No Lag (Testing) - FPS Boost",
-    CurrentValue = false,
-    Flag = "AutoNoLag", 
-    Callback = function(v)
-        AutoNoLag = v
-        if v then
-            Rayfield:Notify({Title = "Optimization", Content = "Removing Textures & VFX...", Duration = 3})
-        else
-            Rayfield:Notify({Title = "Optimization", Content = "No Lag Mode OFF (Note: Removed textures require rejoin to fix)", Duration = 4})
         end
     end
 })
@@ -2218,6 +2224,107 @@ task.spawn(function()
     end
 end)
 
+-- =======================================================
+-- ===== NO LAG V2 (TESTING) =========================
+-- =======================================================
+
+-- Kelas-kelas yang dianggap "effect" dan harus dihapus
+local NOLAG_BLACKLIST_CLASS = {
+    -- Particle & Visual Effects
+    "ParticleEmitter", "Fire", "Smoke", "Sparkles", "Trail",
+    -- Post-Processing Lighting Effects
+    "BloomEffect", "BlurEffect", "ColorCorrectionEffect",
+    "SunRaysEffect", "DepthOfFieldEffect",
+    -- Atmospheric
+    "Atmosphere",
+    -- Decal & Texture (surface)
+    "Decal", "Texture",
+}
+
+-- Nama folder VFX yang langsung di-clear children-nya (bukan dihapus foldernya)
+local NOLAG_VFX_FOLDERS = {
+    "effects", "effect", "vfx", "fx",
+}
+
+-- Fungsi utama: hapus satu objek jika masuk blacklist
+local function NoLagV2_CleanObject(obj)
+    if not obj or not obj.Parent then return end
+
+    -- 1. Cek berdasarkan ClassName
+    for _, className in ipairs(NOLAG_BLACKLIST_CLASS) do
+        if obj:IsA(className) then
+            pcall(function() obj:Destroy() end)
+            return
+        end
+    end
+
+    -- 2. Cek apakah folder/model bernama vfx/effect/effects
+    if obj:IsA("Folder") or obj:IsA("Model") then
+        local nameLower = string.lower(obj.Name)
+        for _, vfxName in ipairs(NOLAG_VFX_FOLDERS) do
+            if nameLower == vfxName then
+                pcall(function() obj:ClearAllChildren() end)
+                return
+            end
+        end
+    end
+end
+
+-- Fungsi: scan awal seluruh Workspace & Lighting
+local function NoLagV2_FullScan()
+    -- Bersihkan Fog via properties Lighting (sangat ringan, tidak perlu loop)
+    local Lighting = game:GetService("Lighting")
+    pcall(function()
+        Lighting.FogEnd    = 100000
+        Lighting.FogStart  = 0
+        Lighting.FogColor  = Color3.new(0.75, 0.75, 0.75)
+    end)
+
+    -- Scan Workspace descendants
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if not AutoNoLagV2 then break end
+        NoLagV2_CleanObject(obj)
+    end
+
+    -- Scan Lighting descendants (bloom, blur, atmosphere, dll)
+    for _, obj in ipairs(Lighting:GetChildren()) do
+        if not AutoNoLagV2 then break end
+        NoLagV2_CleanObject(obj)
+    end
+end
+
+-- Loop utama NoLag V2
+task.spawn(function()
+    while true do
+        task.wait(3) -- Interval ringan, tidak perlu terlalu sering
+
+        if not AutoNoLagV2 then
+            -- Pastikan listener diputus jika toggle off
+            if NoLagV2Connection then
+                NoLagV2Connection:Disconnect()
+                NoLagV2Connection = nil
+            end
+            continue
+        end
+
+        -- Jalankan full scan tiap 3 detik
+        NoLagV2_FullScan()
+
+        -- Pasang listener DescendantAdded jika belum ada
+        -- Ini menangkap effect yang baru muncul (spawn baru, skill, dll)
+        if not NoLagV2Connection then
+            NoLagV2Connection = Workspace.DescendantAdded:Connect(function(obj)
+                if AutoNoLagV2 then
+                    -- Beri sedikit delay agar object sempurna terbentuk sebelum dihapus
+                    task.delay(0.05, function()
+                        NoLagV2_CleanObject(obj)
+                    end)
+                end
+            end)
+        end
+    end
+end)
+
 -- ===== FORCE KILL VIA MAP VOID =====
 local function ForceKillByVoidForLamanchaland()
     local startTime = os.clock()
@@ -2259,49 +2366,6 @@ local function ForceKillByVoidForLamanchaland()
         task.wait(0.25)
     end
 end
-
--- ===== AUTO NO LAG / OPTIMIZATION LOOP =====
-task.spawn(function()
-    while task.wait(3) do -- Berjalan setiap 3 detik agar tidak membuat game freeze saat scanning
-        if AutoNoLag then
-            pcall(function()
-                -- 1. Matikan Shadows & Fog di Lighting
-                game:GetService("Lighting").GlobalShadows = false
-                game:GetService("Lighting").FogEnd = 9e9
-                game:GetService("Lighting").Brightness = 1
-                
-                for _, effect in pairs(game:GetService("Lighting"):GetChildren()) do
-                    if effect:IsA("PostEffect") or effect:IsA("Atmosphere") or effect:IsA("ColorCorrectionEffect") or effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect") then
-                        effect:Destroy()
-                    end
-                end
-
-                -- 2. Hapus Tekstur, Partikel, dan jadikan map Smooth Plastic
-                for _, v in pairs(Workspace:GetDescendants()) do
-                    if v:IsA("BasePart") and not v:IsA("MeshPart") then
-                        v.Material = Enum.Material.SmoothPlastic
-                        v.Reflectance = 0
-                        v.CastShadow = false
-                    elseif v:IsA("Decal") or v:IsA("Texture") then
-                        v.Transparency = 1 -- Transparansi 1 lebih aman daripada Destroy() untuk mencegah game error
-                    elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") then
-                        v:Destroy()
-                    end
-                end
-
-                -- 3. Bersihkan folder khusus Effects / VFX jika game menggunakannya
-                local vfxFolders = {"effects", "effect", "vfx", "particles", "visuals"}
-                for _, folder in pairs(Workspace:GetChildren()) do
-                    if folder:IsA("Folder") or folder:IsA("Model") then
-                        if table.find(vfxFolders, string.lower(folder.Name)) then
-                            folder:ClearAllChildren()
-                        end
-                    end
-                end
-            end)
-        end
-    end
-end)
 
 -- =======================================================
 -- ===== AUTO DUNGEON READY (UPDATED: PressedReady1) =====
