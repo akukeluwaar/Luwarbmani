@@ -2564,47 +2564,39 @@ end)
 -- [[ END: REMOVE FOG (ALWAYS ON LOOP) ]] --
 
 -- [[ START: AUTO SKIP LOADING & AUTO PLAY ]] --
+local function clickButton(btn)
+    if not btn then return end
+    pcall(function() firesignal(btn.MouseButton1Click) end)
+    pcall(function() firesignal(btn.Activated) end)
+    pcall(function()
+        local click = btn:FindFirstChildOfClass("ClickDetector")
+        if click then fireclickdetector(click) end
+    end)
+end
+
 task.spawn(function()
     while task.wait(0.5) do
         pcall(function()
-            local PlayerGui = game:GetService("Players").LocalPlayer.PlayerGui
+            local PlayerGui = Players.LocalPlayer.PlayerGui
 
             -- Jika Loading screen muncul, tekan SkipButton
             local Loading = PlayerGui:FindFirstChild("Loading")
             if Loading then
                 local BG = Loading:FindFirstChild("BG")
                 if BG then
-                    local SkipButton = BG:FindFirstChild("SkipButton")
-                    if SkipButton then
-                        pcall(function() SkipButton.Activated:Fire() end)
-                        pcall(function() firebutton(SkipButton) end)
-                        pcall(function()
-                            local click = SkipButton:FindFirstChildOfClass("ClickDetector")
-                            if click then fireclickdetector(click) end
-                        end)
-                    end
+                    clickButton(BG:FindFirstChild("SkipButton"))
                 end
             end
 
             -- Jika MainMenu muncul, fire remote Play dan tekan tombol Play
             local MainMenu = PlayerGui:FindFirstChild("MainMenu")
             if MainMenu then
-                -- Fire remote
                 pcall(function()
-                    game:GetService("ReplicatedStorage"):WaitForChild("GlobalUsedRemotes"):WaitForChild("Play"):FireServer()
+                    game:GetService("ReplicatedStorage").GlobalUsedRemotes.Play:FireServer()
                 end)
-                -- Tekan tombol Play di GUI
                 local Buttons = MainMenu:FindFirstChild("Buttons")
                 if Buttons then
-                    local PlayButton = Buttons:FindFirstChild("Play")
-                    if PlayButton then
-                        pcall(function() PlayButton.Activated:Fire() end)
-                        pcall(function() firebutton(PlayButton) end)
-                        pcall(function()
-                            local click = PlayButton:FindFirstChildOfClass("ClickDetector")
-                            if click then fireclickdetector(click) end
-                        end)
-                    end
+                    clickButton(Buttons:FindFirstChild("Play"))
                 end
             end
         end)
