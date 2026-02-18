@@ -586,7 +586,7 @@ UtilityTab:CreateToggle({
 })
 
 UtilityTab:CreateToggle({
-    Name = "NoLag (Testing) - Hapus Effects, VFX, Fog, Texture",
+    Name = "NoLag (Testing) - Hapus Effects, VFX, Texture",
     CurrentValue = false,
     Flag = "AutoNoLagV2", 
     Callback = function(v)
@@ -2247,35 +2247,25 @@ local function NoLagV2_CleanObject(obj)
     end
 end
 
--- Scan sekali saat toggle ON, pakai coroutine agar tidak freeze game
+-- Scan sekali saat toggle ON, yield tiap 200 obj agar tidak spike
 local function NoLagV2_OneTimeScan()
     local Lighting = game:GetService("Lighting")
-    -- Reset fog via property (instan, tidak berat)
-    pcall(function()
-        Lighting.FogEnd   = 100000
-        Lighting.FogStart = 0
-    end)
-    -- Hapus post-processing di Lighting
     for _, obj in ipairs(Lighting:GetChildren()) do
         NoLagV2_CleanObject(obj)
     end
-    -- Scan Workspace dengan yield tiap 200 objek agar tidak spike
     local count = 0
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if not AutoNoLagV2 then break end
         NoLagV2_CleanObject(obj)
         count = count + 1
         if count % 200 == 0 then
-            task.wait() -- yield singkat, tidak terasa tapi cegah freeze
+            task.wait()
         end
     end
 end
 
 function NoLagV2_Enable()
-    -- 1. Scan sekali di background
     task.spawn(NoLagV2_OneTimeScan)
-
-    -- 2. Listener reaktif: hapus effect BARU yang muncul saat runtime
     if not NoLagV2Connection then
         NoLagV2Connection = Workspace.DescendantAdded:Connect(function(obj)
             if AutoNoLagV2 then
@@ -2295,46 +2285,14 @@ function NoLagV2_Disable()
     end
 end
 
--- ===== FORCE KILL VIA MAP VOID =====
+-- ===== FORCE REFRESH (LoadCharacter) =====
 local function ForceKillByVoidForLamanchaland()
-    local startTime = os.clock()
-    while (AutoLaMancha) and (os.clock() - startTime < 10) do
-
-        local char = LocalPlayer.Character
-        if not char then
-            LocalPlayer.CharacterAdded:Wait()
-            task.wait(0.5)
-            return
-        end
-
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        if not hum or not hrp then
-            task.wait(0.2)
-            continue
-        end
-
-        -- Cari Killbrick di workspace.Map.Void
-        local map = Workspace:FindFirstChild("Map")
-        local voidFolder = map and map:FindFirstChild("Void")
-        local killbrick = voidFolder and voidFolder:FindFirstChild("Killbrick")
-
-        if killbrick and killbrick:IsA("BasePart") then
-            -- Fire TouchTransmitter yang ada pada TouchInterest di Killbrick
-            local touchInterest = killbrick:FindFirstChildOfClass("TouchTransmitter")
-            if touchInterest then
-                firetouchinterest(hrp, killbrick, 0)
-            end
-        end
-
-        if hum.Health <= 0 then
-            LocalPlayer.CharacterAdded:Wait()
-            task.wait(1)
-            return
-        end
-
-        task.wait(0.25)
-    end
+    if not AutoLaMancha then return end
+    pcall(function()
+        LocalPlayer:LoadCharacter()
+    end)
+    LocalPlayer.CharacterAdded:Wait()
+    task.wait(1)
 end
 
 -- =======================================================
@@ -2523,6 +2481,7 @@ end)
 task.spawn(function()
     local function ClaimDeliciousMeat()
         pcall(function()
+        task.wait(2.2)
             -- Menambahkan waktu tunggu maksimal (10 detik) agar tidak infinite yield
             local abcRemotes = game:GetService("ReplicatedStorage"):WaitForChild("ABCRemotes", 10)
             if abcRemotes then
@@ -2536,13 +2495,11 @@ task.spawn(function()
 
     -- 1. Jalankan untuk karakter yang sedang hidup saat script dieksekusi pertama kali
     if LocalPlayer.Character then
-        task.wait(2.2)
         ClaimDeliciousMeat()
     end
 
     -- 2. Jalankan otomatis setiap kali karakter respawn/spawn baru
     LocalPlayer.CharacterAdded:Connect(function(char)
-        task.wait(2.2)
         ClaimDeliciousMeat()
     end)
 end)
@@ -2556,6 +2513,26 @@ game:GetService("Players").LocalPlayer.Idled:Connect(function()
     VirtualUser:ClickButton2(Vector2.new())
 end)
 -- [[ END: ANTI AFK / IDLE ]] --
+
+-- [[ START: REMOVE FOG (ALWAYS ON) ]] --
+local _Lighting = game:GetService("Lighting")
+-- Set langsung saat script load
+pcall(function()
+    _Lighting.FogEnd   = 100000
+    _Lighting.FogStart = 0
+end)
+-- Listener: reset fog kalau game mengubahnya kembali (misalnya saat map load/change)
+_Lighting:GetPropertyChangedSignal("FogEnd"):Connect(function()
+    if _Lighting.FogEnd < 100000 then
+        _Lighting.FogEnd = 100000
+    end
+end)
+_Lighting:GetPropertyChangedSignal("FogStart"):Connect(function()
+    if _Lighting.FogStart > 0 then
+        _Lighting.FogStart = 0
+    end
+end)
+-- [[ END: REMOVE FOG (ALWAYS ON) ]] --
 
 local stoploop = false
 while true do            
