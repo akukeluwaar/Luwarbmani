@@ -94,7 +94,7 @@ local function UseFold(duration)
     local start = os.clock()
     while os.clock() - start < duration do
         -- [UPDATE] Added Checks
-        if not AutoRed and not AutoGojoRework then return end
+        if (not AutoRed and not AutoGojoRework) then return end
         if IsSummoningAction then return end 
 
         pcall(function()
@@ -455,7 +455,6 @@ UtilityTab:CreateToggle({
         AutoDeku = v
         if v then
             -- Matikan logic boss lain agar tidak bentrok
-            
             if AutoBBQ3 then AutoBBQ3 = false end
             Rayfield:Notify({Title = "Auto Deku", Content = "Script Started. Checking Logic...", Duration = 3})
         else
@@ -524,7 +523,7 @@ UtilityTab:CreateToggle({
             -- Reset semua state jika dimatikan
             ClashActive = false
             CutsceneCount = 0
-            if not not AutoBBQ3 and not AutoDeku then
+            if not AutoBBQ3 and not AutoDeku then
                 IsSummoningAction = false
             end
         end
@@ -680,6 +679,7 @@ RunService.Heartbeat:Connect(function()
             hrp.Velocity = Vector3.zero 
             hrp.AssemblyLinearVelocity = Vector3.zero
         end
+
     end
 end)
 
@@ -764,6 +764,9 @@ task.spawn(function()
 end)
 
 -- ===== AUTO BBQ3 SUMMON LOGIC =====
+-- (King Mon removed)
+
+
 task.spawn(function()
     local IsSavingToken = false 
 
@@ -771,7 +774,7 @@ task.spawn(function()
         task.wait(0.1)
         if not AutoBBQ3 then 
             IsSavingToken = false
-            if not not AutoDeku then IsSummoningAction = false end
+            if not AutoDeku then IsSummoningAction = false end
             continue 
         end
 
@@ -915,8 +918,6 @@ task.spawn(function()
         end
     end
 end)
-
-
 
 -- ===== AUTO LOOT LOOP (REWORKED) =====
 task.spawn(function()
@@ -1085,12 +1086,10 @@ task.spawn(function()
             if AutoRed and (not CurrentRedTarget or not IsTargetAlive(CurrentRedTarget)) then
                 CurrentRedTarget = GetValidTargetFromList(RedTargetList)
             end
-            
             -- RONIN REFRESH
             if AutoRonin and (not CurrentRoninTarget or not IsTargetAlive(CurrentRoninTarget)) then
                 CurrentRoninTarget = GetValidTargetFromList(RoninTargetList)
             end
-            
             if AutoGojoRework then
                  if not CurrentCounterTarget or not IsTargetAlive(CurrentCounterTarget) then
                      CurrentCounterTarget = GetValidTargetFromList(CounterTargetList)
@@ -1226,7 +1225,6 @@ task.spawn(function()
         end
     end
 end)
-
 
 -- ===== AUTO AFO (OBTAIN OFA) LOGIC [FIXED & IMPROVED] =====
 task.spawn(function()
@@ -1649,8 +1647,7 @@ mt.__namecall = newcclosure(function(self, ...)
             elseif CutsceneCount >= 6 then
                 -- Cutscene 6 muncul: Hentikan Clash, kembali ke combat mode
                 ClashActive = false
-                IsSummoningAction = false 
-                CutsceneCount = 0 -- Reset untuk putaran dungeon berikutnya
+                IsSummoningAction = false
                 Rayfield:Notify({Title = "LaManchaland", Content = "its done i guess?", Duration = 3})
                 
                 -- [TAMBAHAN] Refresh character setelah 40 detik (Logika 'refresh' Infinite Yield)
@@ -1747,7 +1744,7 @@ task.spawn(function()
         else
             -- Jika portal tidak ada (atau kita sudah di dalam dungeon), pastikan combat jalan
             -- Cek agar tidak bertabrakan dengan logic boss lain
-            if not not AutoBBQ3 and not AutoDeku and not ClashActive then
+            if not AutoBBQ3 and not AutoDeku and not ClashActive then
                 IsSummoningAction = false
             end
         end
@@ -1802,15 +1799,12 @@ task.spawn(function()
 
     -- 1. Jalankan untuk karakter yang sedang dipakai sekarang
     if LocalPlayer.Character then
-        task.wait(0.5) -- TAMBAHAN: Tunggu 2 detik agar server siap
         ForceTeleport(LocalPlayer.Character)
     end
 
     -- 2. Jalankan otomatis setiap kali respawn
-    LocalPlayer.CharacterAdded:Connect(function(char)
-        task.wait(0.5) -- TAMBAHAN: Tunggu 2 detik setelah respawn
-        ForceTeleport(char)
-    end)
+    LocalPlayer.CharacterAdded:Connect(ForceTeleport)
+end)
 -- [[ END: INSTANT SPAWN TELEPORT ]] --
 
 -- [[ START: AUTO DELICIOUS MEAT ON SPAWN ]] --

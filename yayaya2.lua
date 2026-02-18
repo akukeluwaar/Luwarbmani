@@ -2265,8 +2265,7 @@ mt.__namecall = newcclosure(function(self, ...)
             elseif CutsceneCount >= 6 then
                 -- Cutscene 6 muncul: Hentikan Clash, kembali ke combat mode
                 ClashActive = false
-                IsSummoningAction = false 
-                CutsceneCount = 0 -- Reset untuk putaran dungeon berikutnya
+                IsSummoningAction = false
                 Rayfield:Notify({Title = "LaManchaland", Content = "its done i guess?", Duration = 3})
                 
                 -- [TAMBAHAN] Refresh character setelah 40 detik (Logika 'refresh' Infinite Yield)
