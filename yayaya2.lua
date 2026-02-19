@@ -2502,6 +2502,35 @@ task.spawn(function()
     end
 end)
 
+-- 4. Loop Deteksi Don Quixote HP 0 → Pause Combat
+task.spawn(function()
+    local donQuixoteDead = false
+    while task.wait(0.5) do
+        if not AutoLaMancha then
+            donQuixoteDead = false
+            continue
+        end
+        local living = Workspace:FindFirstChild("Living")
+        local don = living and living:FindFirstChild("Don Quixote")
+        if don then
+            local hum = don:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health <= 0 and not donQuixoteDead then
+                donQuixoteDead = true
+                IsSummoningAction = true
+                Rayfield:Notify({Title = "LaManchaland", Content = "Don Quixote mati, combat di-pause.", Duration = 5})
+            elseif (not don or not hum or hum.Health > 0) and donQuixoteDead then
+                -- Don Quixote respawn / hilang, reset
+                donQuixoteDead = false
+            end
+        else
+            -- Don Quixote tidak ada di Living, reset flag
+            if donQuixoteDead then
+                donQuixoteDead = false
+            end
+        end
+    end
+end)
+
 Rayfield:LoadConfiguration()
 -- [[ START: INSTANT SPAWN TELEPORT ]] --
 task.spawn(function()
