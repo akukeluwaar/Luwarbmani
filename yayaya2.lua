@@ -2627,24 +2627,25 @@ task.spawn(function()
 end)
 -- [[ END: AUTO SKIP LOADING & AUTO PLAY ]] --
 
--- [[ START: REMOVE FOG (ALWAYS ON LOOP) ]] --
+-- [[ START: REMOVE FOG (EVENT DRIVEN) ]] --
 task.spawn(function()
     local Lighting = game:GetService("Lighting")
-    while task.wait(1) do
-        pcall(function()
-            Lighting.FogEnd = 100000
-            Lighting.FogStart = 0
-            -- Jangan destroy Atmosphere, cukup nol-kan propertinya
-            -- agar tidak trigger event game yang bisa munculkan menu
-            for _, v in pairs(Lighting:GetDescendants()) do
-                if v:IsA("Atmosphere") then
-                    v.Density = 0
-                    v.Haze    = 0
-                    v.Glare   = 0
-                    v.Offset  = 0
-                end
-            end
-        end)
-    end
+    
+    -- Set it instantly on script execution
+    Lighting.FogEnd = 9999999
+    Lighting.FogStart = 9999999
+    
+    -- Force it back if the game tries to change it
+    Lighting:GetPropertyChangedSignal("FogEnd"):Connect(function()
+        if Lighting.FogEnd ~= 9999999 then
+            Lighting.FogEnd = 9999999
+        end
+    end)
+
+    Lighting:GetPropertyChangedSignal("FogStart"):Connect(function()
+        if Lighting.FogStart ~= 9999999 then
+            Lighting.FogStart = 9999999
+        end
+    end)
 end)
--- [[ END: REMOVE FOG (ALWAYS ON LOOP) ]] --
+-- [[ END: REMOVE FOG (EVENT DRIVEN) ]] --
