@@ -2514,7 +2514,7 @@ task.spawn(function()
         local don = living and living:FindFirstChild("Don Quixote")
         if don then
             local hum = don:FindFirstChildOfClass("Humanoid")
-            if hum and hum.Health <= 0 and not donQuixoteDead then
+            if hum and hum.Health <= 1 and not donQuixoteDead then
                 donQuixoteDead = true
                 IsSummoningAction = true
                 Rayfield:Notify({Title = "LaManchaland", Content = "Don Quixote mati, combat di-pause.", Duration = 5})
