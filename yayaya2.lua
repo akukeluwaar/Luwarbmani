@@ -2225,19 +2225,50 @@ end)
 -- ===== NO LAG V2 (TESTING) =========================
 -- =======================================================
 
+-- HANYA class yang murni visual effect dan TIDAK mempengaruhi game logic / UI
 local NOLAG_CLASS = {
-    ParticleEmitter=true, Fire=true, Smoke=true, Sparkles=true, Trail=true,
-    BloomEffect=true, BlurEffect=true, ColorCorrectionEffect=true,
-    SunRaysEffect=true, DepthOfFieldEffect=true,
-    Atmosphere=true, Decal=true, Texture=true,
+    ParticleEmitter       = true,
+    Fire                  = true,
+    Smoke                 = true,
+    Sparkles              = true,
+    Trail                 = true,
+    BloomEffect           = true,
+    BlurEffect            = true,
+    ColorCorrectionEffect = true,
+    SunRaysEffect         = true,
+    DepthOfFieldEffect    = true,
+    -- Decal & Texture TIDAK dimasukkan: bisa dipakai UI/game logic
+    -- BillboardGui & SurfaceGui TIDAK dimasukkan: ini UI element game
+    -- Sky TIDAK dimasukkan: bisa trigger event game
+    -- Atmosphere TIDAK dimasukkan: sudah dihandle loop tersendiri (property = 0)
 }
 
 local NOLAG_VFX_NAME = {
     effects=true, effect=true, vfx=true, fx=true,
 }
 
+-- Whitelist: folder/parent yang TIDAK boleh disentuh agar UI tetap aman
+local NOLAG_PROTECTED_PARENT = {
+    PlayerGui  = true,
+    StarterGui = true,
+    CoreGui    = true,
+}
+
+local function NoLagV2_IsProtected(obj)
+    local cur = obj.Parent
+    while cur do
+        if NOLAG_PROTECTED_PARENT[cur.Name] or NOLAG_PROTECTED_PARENT[cur.ClassName] then
+            return true
+        end
+        cur = cur.Parent
+    end
+    return false
+end
+
 local function NoLagV2_CleanObject(obj)
     if not obj or not obj.Parent then return end
+    -- Jangan sentuh apapun yang ada di dalam PlayerGui / CoreGui
+    if NoLagV2_IsProtected(obj) then return end
     if NOLAG_CLASS[obj.ClassName] then
         pcall(function() obj:Destroy() end)
         return
@@ -2253,6 +2284,15 @@ local function NoLagV2_OneTimeScan()
     for _, obj in ipairs(Lighting:GetChildren()) do
         NoLagV2_CleanObject(obj)
     end
+    -- Bersihkan VFX assets di ReplicatedStorage (HANYA folder VFX, bukan modules/scripts)
+    pcall(function()
+        local RS = game:GetService("ReplicatedStorage")
+        local abcVFX = RS:FindFirstChild("ABCRemotes") and RS.ABCRemotes:FindFirstChild("VFX")
+        if abcVFX then abcVFX:ClearAllChildren() end
+        local visuals = RS:FindFirstChild("Assets") and RS.Assets:FindFirstChild("Visuals")
+        if visuals then visuals:ClearAllChildren() end
+        -- ClientModules & VFXModules SENGAJA tidak disentuh karena berisi scripts game
+    end)
     local count = 0
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if not AutoNoLagV2 then break end
@@ -2285,46 +2325,43 @@ function NoLagV2_Disable()
     end
 end
 
--- =======================================================
--- ===== INFINITE YIELD STYLE REFRESH (FULL RESET) =======
--- =======================================================
-local function IY_Refresh(plr)
-    local char = plr.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    local cam = workspace.CurrentCamera
-    
-    if not root then return end
+-- ===== FORCE KILL VIA MAP VOID =====
+local function KillByVoid()
+    local startTime = os.clock()
+    -- [UPDATE] Added AutoComboQZG
+    while (AutoLaMancha) and (os.clock() - startTime < 10) do 
+        if IsSummoningAction then return end
 
-    -- 1. Simpan Posisi Karakter & Kamera
-    local savedPos = root.CFrame
-    local savedCamPos = cam.CFrame
-
-    -- 2. Trik Respawn Instan ala Infinite Yield
-    -- Membunuh humanoid dan mengosongkan karakter untuk memaksa engine me-reload semuanya seketika
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if hum then hum:ChangeState(15) end -- 15 adalah Enum.HumanoidStateType.Dead
-    char:ClearAllChildren()
-    
-    local newChar = Instance.new("Model")
-    newChar.Parent = workspace
-    plr.Character = newChar
-    
-    task.wait()
-    plr.Character = char
-    newChar:Destroy()
-
-    -- 3. Tunggu Karakter & UI Baru Ter-load, Lalu Kembalikan Posisi
-    task.spawn(function()
-        local spawnedChar = plr.CharacterAdded:Wait()
-        local newRoot = spawnedChar:WaitForChild("HumanoidRootPart", 5)
-        
-        if newRoot then
-            -- Tunggu 1 frame agar physics dan UI selesai di-render
-            game:GetService("RunService").Heartbeat:Wait() 
-            newRoot.CFrame = savedPos
-            workspace.CurrentCamera.CFrame = savedCamPos
+        local char = LocalPlayer.Character
+        if not char then
+            LocalPlayer.CharacterAdded:Wait()
+            task.wait(0.5)
+            return
         end
-    end)
+
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hum or not hrp then
+            task.wait(0.2)
+            continue
+        end
+
+        local map = Workspace:FindFirstChild("Map")
+        local voidFolder = map and map:FindFirstChild("Void")
+        local voidPart = voidFolder and voidFolder:GetChildren()[7]
+
+        if voidPart and voidPart:IsA("BasePart") then
+            hrp.CFrame = voidPart.CFrame + Vector3.new(0,0,0)
+        end
+
+        if hum.Health <= 0 then
+            LocalPlayer.CharacterAdded:Wait()
+            task.wait(1)
+            return
+        end
+
+        task.wait(0.25)
+    end
 end
 
 -- =======================================================
@@ -2391,15 +2428,16 @@ mt.__namecall = newcclosure(function(self, ...)
             elseif CutsceneCount >= 6 then
                 -- Cutscene 6 muncul: Hentikan Clash, kembali ke combat mode
                 ClashActive = false
-                IsSummoningAction = false
+                IsSummoningAction = false 
+                CutsceneCount = 0
                 Rayfield:Notify({Title = "LaManchaland", Content = "its done i guess?", Duration = 3})
                 
                 -- [TAMBAHAN] Refresh character & GUI total setelah 60 detik (IY Style)
                 task.wait(60)
-                IY_Refresh(LocalPlayer)
+                KillByVoid()
             end
         end -- [KOREKSI 1]: Ini untuk menutup 'if AutoLaMancha then'
-    end -- [KOREKSI 2]: Ini untuk menutup 'if not checkcaller() ... then'
+    end
     return oldNamecall(self, ...)
 end)
 setreadonly(mt, true)
@@ -2438,7 +2476,7 @@ task.spawn(function()
                 Rayfield:Notify({Title = "LaManchaland", Content = "Entering Portal...", Duration = 5})
                 
                 -- Tunggu 20 detik sesuai permintaan
-                task.wait(20)
+                task.wait(10)
                 
                 -- Lepas kunci combat agar combat mode berjalan di dalam dungeon
                 IsSummoningAction = false
@@ -2546,23 +2584,6 @@ game:GetService("Players").LocalPlayer.Idled:Connect(function()
 end)
 -- [[ END: ANTI AFK / IDLE ]] --
 
--- [[ START: REMOVE FOG (ALWAYS ON LOOP) ]] --
-task.spawn(function()
-    while task.wait(0.01) do
-        pcall(function()
-            local Lighting = game:GetService("Lighting")
-            Lighting.FogEnd = 100000
-            Lighting.FogStart = 0
-            for _, v in pairs(Lighting:GetDescendants()) do
-                if v:IsA("Atmosphere") then
-                    v:Destroy()
-                end
-            end
-        end)
-    end
-end)
--- [[ END: REMOVE FOG (ALWAYS ON LOOP) ]] --
-
 -- [[ START: AUTO SKIP LOADING & AUTO PLAY ]] --
 local function clickButton(btn)
     if not btn then return end
@@ -2574,7 +2595,11 @@ local function clickButton(btn)
     end)
 end
 
+game:GetService("ReplicatedStorage"):WaitForChild("GlobalUsedRemotes"):WaitForChild("Play"):FireServer()
+
 task.spawn(function()
+    local playClickCount = 0
+
     while task.wait(0.5) do
         pcall(function()
             local PlayerGui = Players.LocalPlayer.PlayerGui
@@ -2587,13 +2612,11 @@ task.spawn(function()
                     clickButton(BG:FindFirstChild("SkipButton"))
                 end
             end
-
+            
+            task.wait(20)
             -- Jika MainMenu muncul, fire remote Play dan tekan tombol Play
             local MainMenu = PlayerGui:FindFirstChild("MainMenu")
             if MainMenu then
-                pcall(function()
-                    game:GetService("ReplicatedStorage").GlobalUsedRemotes.Play:FireServer()
-                end)
                 local Buttons = MainMenu:FindFirstChild("Buttons")
                 if Buttons then
                     clickButton(Buttons:FindFirstChild("Play"))
@@ -2603,3 +2626,25 @@ task.spawn(function()
     end
 end)
 -- [[ END: AUTO SKIP LOADING & AUTO PLAY ]] --
+
+-- [[ START: REMOVE FOG (ALWAYS ON LOOP) ]] --
+task.spawn(function()
+    local Lighting = game:GetService("Lighting")
+    while task.wait(1) do
+        pcall(function()
+            Lighting.FogEnd = 100000
+            Lighting.FogStart = 0
+            -- Jangan destroy Atmosphere, cukup nol-kan propertinya
+            -- agar tidak trigger event game yang bisa munculkan menu
+            for _, v in pairs(Lighting:GetDescendants()) do
+                if v:IsA("Atmosphere") then
+                    v.Density = 0
+                    v.Haze    = 0
+                    v.Glare   = 0
+                    v.Offset  = 0
+                end
+            end
+        end)
+    end
+end)
+-- [[ END: REMOVE FOG (ALWAYS ON LOOP) ]] --
