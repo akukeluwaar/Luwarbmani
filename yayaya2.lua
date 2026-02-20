@@ -196,19 +196,27 @@ end
 local function getItemNameList()
     local names, seen = {}, {}
     if ItemFolder then
-        for _, obj in ipairs(ItemFolder:GetDescendants()) do
-            if obj:IsA("ProximityPrompt") then
-                local part = obj.Parent
-                local model = part.Parent
-                local itemName = model.Name
-                if itemName == "ItemDrop" and model.Parent then
-                    itemName = model.Parent.Name
-                end
-                
-                if not seen[itemName] then
-                    seen[itemName] = true
-                    table.insert(names, itemName)
-                end
+        -- Pakai GetChildren() agar konsisten dengan loot loop
+        for _, itemModel in ipairs(ItemFolder:GetChildren()) do
+            -- Pastikan ada ProximityPrompt (artinya bisa di-loot)
+            local hasPrompt = itemModel:FindFirstChildWhichIsA("ProximityPrompt", true)
+            if not hasPrompt then continue end
+
+            -- Baca nama item (sama persis dengan cara loot loop membacanya)
+            local itemName = itemModel.Name
+            local nameVal = itemModel:FindFirstChild("ItemName")
+                or (itemModel:FindFirstChild("ItemDrop") and itemModel.ItemDrop:FindFirstChild("ItemName"))
+            if nameVal then itemName = nameVal.Value end
+
+            -- [MODIFIKASI] Skip nama yang tidak valid DAN skip Box, Chest, Barrel
+            if itemName == "" or itemName == "Item" or itemName == "ItemDrop" or 
+               itemName == "Box" or itemName == "Chest" or itemName == "Barrel" then 
+                continue 
+            end
+
+            if not seen[itemName] then
+                seen[itemName] = true
+                table.insert(names, itemName)
             end
         end
     end
@@ -739,7 +747,7 @@ LootTab:CreateToggle({
 })
 
 LootTab:CreateToggle({
-    Name = "Auto Box & Barrel Only",
+    Name = "Auto Box Barrel & Chest",
     CurrentValue = false,
     Flag = "AutoBoxBarrel", 
     Callback = function(v) 
@@ -1384,67 +1392,67 @@ task.spawn(function()
     end
 end)
 
--- ===== AUTO LOOT LOOP (REWORKED) =====
+-- Buat daftar item yang ingin diabaikan secara permanen
+local ignoredLoot = {
+    ["Box"] = true,
+    ["Chest"] = true,
+    ["Barrel"] = true
+}
+
+-- Logika Auto Loot Rework (Diperbarui)
 task.spawn(function()
-    while task.wait(0.5) do
-        if IsSummoningAction then 
-            continue 
-        end
+    while task.wait(0.1) do 
+        if AutoLootRework then 
+            -- (Opsional) Jangan looting jika sedang summon boss agar tidak glitch
+            if IsSummoningAction then continue end 
 
-        if not AutoLootRework then 
-            LootingActive = false
-            continue 
-        end
-        
-        -- [UPDATE] Added Checks
-        if FollowTarget or HollowFollow or RedFollow or CounterFollow or PurpleFollow or ZMoveFollow or GilgameshFollow or ComboFollow then
-            LootingActive = false
-            continue
-        end
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            
+            if hrp then
+                -- Gunakan ItemFolder (Workspace.Item) seperti pada fungsi box/barrel
+                local items = ItemFolder and ItemFolder:GetChildren() or {}
+                
+                for _, item in ipairs(items) do
+                    if not AutoLootRework then break end
 
-        local char = LocalPlayer.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        if not hrp then continue end
-
-        local items = Workspace:FindFirstChild("Item") and Workspace.Item:GetChildren() or {}
-
-        if #items > 0 then
-            LootingActive = true
-            for _, item in ipairs(items) do
-                if not AutoLootRework then break end
-                if IsSummoningAction then break end
-                if FollowTarget or HollowFollow or RedFollow or CounterFollow or PurpleFollow or ZMoveFollow or GilgameshFollow or ComboFollow then break end
-
-                local itemName = item.Name
-                local nameVal = item:FindFirstChild("ItemName") or (item:FindFirstChild("ItemDrop") and item.ItemDrop:FindFirstChild("ItemName"))
-                if nameVal then itemName = nameVal.Value end
-
-                if ItemBlacklist[itemName] then 
-                    continue 
-                end
-
-                local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
-                local targetPart = item:FindFirstChild("ItemDrop") or item:FindFirstChildWhichIsA("BasePart") or item
-
-                if prompt and targetPart and targetPart:IsA("BasePart") then
-                    hrp.CFrame = targetPart.CFrame + Vector3.new(0, 3, 0)
-                    hrp.Velocity = Vector3.zero
-                    hrp.AssemblyLinearVelocity = Vector3.zero
+                    -- Baca nama asli item
+                    local itemName = item.Name
+                    local nameVal = item:FindFirstChild("ItemName") or (item:FindFirstChild("ItemDrop") and item.ItemDrop:FindFirstChild("ItemName"))
+                    if nameVal then itemName = nameVal.Value end
                     
-                    prompt.HoldDuration = 0
-                    prompt.MaxActivationDistance = 50
+                    -- 1. Abaikan jika item adalah Box, Chest, atau Barrel
+                    if ignoredLoot[itemName] then continue end
+
+                    -- 2. Abaikan jika item masuk ke dalam blacklist UI
+                    if ItemBlacklist[itemName] then continue end
                     
-                    task.wait(0.15) 
-                    fireproximityprompt(prompt) 
-                    task.wait(LootDelay) 
+                    -- Proses Looting dengan ProximityPrompt
+                    local targetPart = item:FindFirstChild("ItemDrop") or item:FindFirstChildWhichIsA("BasePart") or item
+                    local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
+                    
+                    if targetPart and targetPart:IsA("BasePart") and prompt then
+                        -- Teleport ke item
+                        hrp.CFrame = targetPart.CFrame + Vector3.new(0, 3, 0)
+                        hrp.Velocity = Vector3.zero
+                        hrp.AssemblyLinearVelocity = Vector3.zero
+                        
+                        -- Bypass Prompt
+                        prompt.HoldDuration = 0
+                        prompt.MaxActivationDistance = 50
+                        
+                        task.wait(0.15) 
+                        fireproximityprompt(prompt) 
+                        
+                        task.wait(LootDelay) 
+                    end
                 end
             end
-            LootingActive = false
         end
     end
 end)
 
--- ===== AUTO BOX & BARREL LOOP =====
+-- ===== AUTO BOX & BARREL & CHEST LOOP =====
 task.spawn(function()
     while task.wait(0.5) do
         -- Cek prioritas (Summoning/Combat mematikan looting)
@@ -1478,8 +1486,11 @@ task.spawn(function()
                 local nameVal = item:FindFirstChild("ItemName") or (item:FindFirstChild("ItemDrop") and item.ItemDrop:FindFirstChild("ItemName"))
                 if nameVal then itemName = nameVal.Value end
 
-                -- [[ MODIFIKASI: HANYA AMBIL BOX DAN BARREL ]] --
-                if itemName == "Box" or itemName == "Barrel" then 
+                -- Cek apakah player memiliki Chest Key di Backpack
+                local hasChestKey = GetItemCount("Chest Key") > 0
+
+                -- [[ MODIFIKASI: AMBIL BOX, BARREL, DAN CHEST (JIKA ADA KEY) ]] --
+                if itemName == "Box" or itemName == "Barrel" or (itemName == "Chest" and hasChestKey) then 
                     
                     local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
                     local targetPart = item:FindFirstChild("ItemDrop") or item:FindFirstChildWhichIsA("BasePart") or item
@@ -2422,7 +2433,6 @@ mt.__namecall = newcclosure(function(self, ...)
             if CutsceneCount == 1 then
                 -- Cutscene 1 muncul: Hentikan combat normal, mulai spam Clash
                 ClashActive = true
-                IsSummoningAction = true 
                 Rayfield:Notify({Title = "LaManchaland", Content = "Gallop On", Duration = 3})
                 
             elseif CutsceneCount >= 6 then
@@ -2497,36 +2507,8 @@ task.spawn(function()
         if AutoLaMancha and ClashActive then
             pcall(function()
                 game:GetService("ReplicatedStorage"):WaitForChild("ABC - First Priority"):WaitForChild("Remotes"):WaitForChild("SendClash"):FireServer()
-            end)
-        end
-    end
-end)
-
--- 4. Loop Deteksi Don Quixote HP 0 → Pause Combat
-task.spawn(function()
-    local donQuixoteDead = false
-    while task.wait(0.5) do
-        if not AutoLaMancha then
-            donQuixoteDead = false
-            continue
-        end
-        local living = Workspace:FindFirstChild("Living")
-        local don = living and living:FindFirstChild("Don Quixote")
-        if don then
-            local hum = don:FindFirstChildOfClass("Humanoid")
-            if hum and hum.Health <= 1 and not donQuixoteDead then
-                donQuixoteDead = true
                 IsSummoningAction = true
-                Rayfield:Notify({Title = "LaManchaland", Content = "Don Quixote mati, combat di-pause.", Duration = 5})
-            elseif (not don or not hum or hum.Health > 0) and donQuixoteDead then
-                -- Don Quixote respawn / hilang, reset
-                donQuixoteDead = false
-            end
-        else
-            -- Don Quixote tidak ada di Living, reset flag
-            if donQuixoteDead then
-                donQuixoteDead = false
-            end
+            end)
         end
     end
 end)
@@ -2642,7 +2624,7 @@ task.spawn(function()
                 end
             end
             
-            task.wait(20)
+            task.wait(10)
             -- Jika MainMenu muncul, fire remote Play dan tekan tombol Play
             local MainMenu = PlayerGui:FindFirstChild("MainMenu")
             if MainMenu then
